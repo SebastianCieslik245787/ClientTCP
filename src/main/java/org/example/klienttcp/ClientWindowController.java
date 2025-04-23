@@ -10,6 +10,7 @@ import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -46,45 +47,68 @@ public class ClientWindowController {
 
     public void initialize() {
         sendButton.setOnAction(_ -> {
-            if(isConnected) {
+            if (isConnected) {
                 if (validateInputMessage()) {
                     String message = clientMessageField.getText();
                     try {
                         outToServer.writeBytes(message + '\n');
                         clientMessageField.clear();
-                        logMessage("[" + getTime() + "] Message: \"" + message + "\" has send to server. (" + message.getBytes().length + " bytes)");
+                        logMessage(getTime() + " Message: \"" + message + "\" has send to server. (" + message.getBytes().length + " bytes)");
                     } catch (IOException e) {
-                        logMessage("[" + getTime() + "] Can not send message to server");
+                        logMessage(getTime() + " Can not send message to server");
                         isConnected = false;
                         setConnectionToServerStatus(false);
                     }
                     try {
-                        logMessage("[" + getTime() + "] Message \"" + inFromServer.readLine() + "\" received from the server. (" + message.getBytes().length + " bytes)");
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                    try {
+                        if (inFromServer.ready())
+                            try {
+                                String response = inFromServer.readLine();
+                                logMessage(getTime() + " Message: \"" + response + "\" received from the server. (" + response.getBytes().length + " bytes)");
+                            } catch (IOException e) {
+                                logMessage(getTime() + " Can not receive message from server");
+                                isConnected = false;
+                                setConnectionToServerStatus(false);
+                            }
                     } catch (IOException e) {
-                        logMessage("[" + getTime() + "] Can not receive message from server");
-                        isConnected = false;
-                        setConnectionToServerStatus(false);
+                        logMessage(getTime() + " Server is not responding!");
+                        try {
+                            clientSocket.close();
+                            logMessage(getTime() + " Client Socket closed!");
+                            isConnected = false;
+                            setConnectionToServerStatus(false);
+                            toggleConnectionUI(false);
+                        } catch (IOException ex) {
+                            logMessage(getTime() + " Can not close connection with server!");
+                        }
                     }
                 }
-            }
-            else {
-                logMessage("[" + getTime() + "] Can not send message to server because you are not connected!");
+            } else {
+                logMessage(getTime() + " Can not send message to server because you are not connected!");
             }
         });
-
+        /*
+         * Na tej stronie znalazłem informacje co trzeba zrobić żeby po wpisaniu zlego ip serwera aplikacja nie czekała w nieskończoność na połączenie
+         * https://www.baeldung.com/java-socket-connection-read-timeout
+         */
         connectButton.setOnAction(_ -> {
-            if(validatePort()){
-                if(validateAddress()){
+            if (validatePort()) {
+                if (validateAddress()) {
                     try {
-                        clientSocket = new Socket(addressField.getText(), Integer.parseInt(portField.getText()));
+                        clientSocket = new Socket();
+                        clientSocket.connect(new InetSocketAddress(addressField.getText(), Integer.parseInt(portField.getText())), 3000);
                         outToServer = new DataOutputStream(clientSocket.getOutputStream());
                         inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                         isConnected = true;
-                        logMessage("[" + getTime() + "] Connected to server.");
+                        logMessage(getTime() + " Connected to server.");
                         toggleConnectionUI(true);
                         setConnectionToServerStatus(true);
                     } catch (IOException e) {
-                        logMessage("[" + getTime() + "] Could not connect to server.");
+                        logMessage(getTime() + " Could not connect to server.");
                     }
                 }
             }
@@ -94,11 +118,11 @@ public class ClientWindowController {
             try {
                 clientSocket.close();
                 isConnected = false;
-                logMessage("[" + getTime() + "] Disconnected from server.");
+                logMessage(getTime() + " Disconnected from server.");
                 toggleConnectionUI(false);
                 setConnectionToServerStatus(false);
             } catch (IOException e) {
-                logMessage("[" + getTime() + "] Could not disconnect from server.");
+                logMessage(getTime() + " Could not disconnect from server.");
             }
         });
     }
@@ -109,7 +133,7 @@ public class ClientWindowController {
     private String getTime() {
         LocalDateTime myDateObj = LocalDateTime.now();
         DateTimeFormatter myFormatObj = DateTimeFormatter.ofPattern("HH:mm:ss");
-        return myDateObj.format(myFormatObj);
+        return "[" + myDateObj.format(myFormatObj) + "]";
     }
 
     private void logMessage(String message) {
@@ -130,10 +154,7 @@ public class ClientWindowController {
     private Boolean validateInputMessage() {
         int messageSize = clientMessageField.getText().getBytes().length;
         if (messageSize == 0) {
-            logMessage("[" + getTime() + "] Can not send empty message to server!");
-            return false;
-        } else if (messageSize > 1024) {
-            logMessage("[" + getTime() + "] Can not send message to server! Message is too large. (Current size: " + messageSize + " bytes; Max size: 1024 bytes)");
+            logMessage(getTime() + " Can not send empty message to server!");
             return false;
         }
         return true;
@@ -142,8 +163,8 @@ public class ClientWindowController {
     /*
      * Do testowaania i tworzenia regex'ów posłużyłem się https://regexr.com/
      */
-    private Boolean validatePort(){
-        if(portField.getText().isEmpty()) {
+    private Boolean validatePort() {
+        if (portField.getText().isEmpty()) {
             errorLabel.setText("Port can not be empty");
             errorLabel.setVisible(true);
             return false;
@@ -160,16 +181,16 @@ public class ClientWindowController {
         return true;
     }
 
-    private Boolean validateAddress(){
-        if(addressField.getText().isEmpty()) {
+    private Boolean validateAddress() {
+        if (addressField.getText().isEmpty()) {
             errorLabel.setText("Address can not be empty");
             errorLabel.setVisible(true);
             return false;
         }
 
-        String ADDRESS_PATTERN = "^(localhost|((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d\\.){3}.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)))$";
+        String ADDRESS_PATTERN = "^(localhost|((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)))$";
 
-        if(!addressField.getText().matches(ADDRESS_PATTERN)) {
+        if (!addressField.getText().matches(ADDRESS_PATTERN)) {
             errorLabel.setText("Address must be a valid IP address! (Possible addresses are: [0-255].[0-255].[0-255].[0-255] or localhost)");
             errorLabel.setVisible(true);
             return false;
@@ -180,11 +201,10 @@ public class ClientWindowController {
     }
 
     private void setConnectionToServerStatus(boolean connectionStatus) {
-        if(connectionStatus) {
+        if (connectionStatus) {
             serverStatus.setText("Connected");
             serverStatus.setTextFill(Paint.valueOf("#058e2e"));
-        }
-        else {
+        } else {
             serverStatus.setText("Not Connected");
             serverStatus.setTextFill(Paint.valueOf("#e10202"));
         }
