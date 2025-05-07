@@ -173,11 +173,13 @@ public class ClientWindowController {
         return true;
     }
 
-    private void setConnectionToServerStatus(boolean connectionStatus) {
+    public void setConnectionToServerStatus(boolean connectionStatus) {
         if (connectionStatus) {
+            isConnected = true;
             serverStatus.setText("Connected");
             serverStatus.setTextFill(Paint.valueOf("#058e2e"));
         } else {
+            isConnected = false;
             serverStatus.setText("Not Connected");
             serverStatus.setTextFill(Paint.valueOf("#e10202"));
         }

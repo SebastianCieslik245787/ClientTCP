@@ -43,7 +43,7 @@ public class Client {
 
     public boolean sendMessage(String message){
         try{
-            outToServer.writeBytes(message + '\n');
+            outToServer.writeBytes(message);
         }
         catch (Exception e){
             return false;
@@ -55,7 +55,12 @@ public class Client {
         try {
             if (inFromServer.ready())
                 try {
-                    String response = inFromServer.readLine();
+                    char[] buffer = new char[1024];
+                    int bytesRead = inFromServer.read(buffer);
+                    if (bytesRead == -1) {
+                        return false;
+                    }
+                    String response = new String(buffer, 0, bytesRead);
                     clientWindowController.logMessage(" Message: \"" + response + "\" received from the server. (" + response.getBytes().length + " bytes)");
                 } catch (IOException e) {
                     clientWindowController.logMessage(" Can not receive message from server");
